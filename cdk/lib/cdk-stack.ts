@@ -105,7 +105,7 @@ export class CdkStack extends cdk.Stack {
     let describeInstancesFn = new lambda.Function(this, 'describeInstances', {
       runtime: lambda.Runtime.NODEJS_12_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, 'lambda/describeInstances')),
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/describeInstances')),
     });
     describeInstancesFn.role?.addToPolicy(new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -113,15 +113,16 @@ export class CdkStack extends cdk.Stack {
         actions: ['ec2:describeInstances'],
     }));;
 
-    const fn = new lambda.Function(this, 'MyFunction', {
-      runtime: lambda.Runtime.NODEJS_12_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, 'lambda/stackEventHandler')),
-    });
+
+    // const instanceStateChangedFn = new lambda.Function(this, 'instanceStateChanged', {
+    //   runtime: lambda.Runtime.NODEJS_12_X,
+    //   handler: 'index.handler',
+    //   code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/instanceStateChanged')),
+    // });
   
-    new EventsRuleToLambda(this, 'test-events-rule-lambda', {
+    new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
       lambdaFunctionProps: {
-        code: lambda.Code.asset(`${__dirname}/lambda`),
+        code: lambda.Code.asset(path.join(__dirname, '..', '..', 'lambda/instanceStateChanged')),
         runtime: lambda.Runtime.NODEJS_12_X,
         handler: 'index.handler'
       },
@@ -131,10 +132,10 @@ export class CdkStack extends cdk.Stack {
         eventPattern: {
           detailType: ["EC2 Instance State-change Notification"],
           source: [ "aws.ec2" ]
-        },
-        targets: [
-          new eventTargets.LambdaFunction(fn)
-        ]
+        }//,
+        // targets: [
+        //   new eventTargets.LambdaFunction(instanceStateChangedFn)
+        // ]
       }
     });
 
