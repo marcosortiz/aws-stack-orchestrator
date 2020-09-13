@@ -112,13 +112,6 @@ export class CdkStack extends cdk.Stack {
         resources: ['*'],
         actions: ['ec2:describeInstances'],
     }));;
-
-
-    // const instanceStateChangedFn = new lambda.Function(this, 'instanceStateChanged', {
-    //   runtime: lambda.Runtime.NODEJS_12_X,
-    //   handler: 'index.handler',
-    //   code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/instanceStateChanged')),
-    // });
   
     new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
       lambdaFunctionProps: {
@@ -132,10 +125,7 @@ export class CdkStack extends cdk.Stack {
         eventPattern: {
           detailType: ["EC2 Instance State-change Notification"],
           source: [ "aws.ec2" ]
-        }//,
-        // targets: [
-        //   new eventTargets.LambdaFunction(instanceStateChangedFn)
-        // ]
+        }
       }
     });
 
