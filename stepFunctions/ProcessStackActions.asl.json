@@ -1,0 +1,37 @@
+{
+    "Comment": "Orchestrates EC2 actions for a given stack",
+    "StartAt": "QueryStackOrder",
+    "States": {
+        "QueryStackOrder": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:564151284033:function:stackOrchestrator-queryStackOrder94419913-UX4019D55YH6",
+            "ResultPath": "$.iterator",
+            "Next": "HasMoreTiers?"
+        },
+        "HasMoreTiers?": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.iterator.nextTier",
+                    "IsPresent": true,
+                    "Next": "ProcessNextTier"
+                },
+                {
+                    "Variable": "$.iterator.nextTier",
+                    "IsPresent": false,
+                    "Next": "Done"
+                }
+            ],
+            "Default": "Done"
+        },
+        "ProcessNextTier": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:564151284033:function:stackOrchestrator-processTierB903844A-1S3KU5DPIK5Q6",
+            "ResultPath": "$.iterator",
+            "Next": "HasMoreTiers?"
+        },
+        "Done": {
+            "Type": "Succeed"
+        }
+    }
+}

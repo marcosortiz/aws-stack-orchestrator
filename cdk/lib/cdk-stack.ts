@@ -129,6 +129,18 @@ export class CdkStack extends cdk.Stack {
       }
     });
 
+    let queryStackOrderFn = new lambda.Function(this, 'queryStackOrder', {
+      runtime: lambda.Runtime.NODEJS_12_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/queryStackOrder')),
+    });
+
+    let processTierFn = new lambda.Function(this, 'processTier', {
+      runtime: lambda.Runtime.NODEJS_12_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processTier')),
+    });
+
     
   }
 }
