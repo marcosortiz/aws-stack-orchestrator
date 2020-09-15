@@ -6,6 +6,8 @@ import * as lambda from '@aws-cdk/aws-lambda';
 import * as eventTargets from '@aws-cdk/aws-events-targets';
 import * as path from 'path';
 import { EventsRuleToLambdaProps, EventsRuleToLambda } from '@aws-solutions-constructs/aws-events-rule-lambda';
+import * as sfn from '@aws-cdk/aws-stepfunctions';
+import * as tasks from '@aws-cdk/aws-stepfunctions-tasks';
 
 const ENV_PROPS = {
   env: { 
@@ -141,6 +143,32 @@ export class CdkStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processTier')),
     });
 
+    const queryStackTask = new tasks.LambdaInvoke(this, 'QueryStack', {
+      lambdaFunction: queryStackOrderFn,
+      payloadResponseOnly: true,
+      resultPath: '$.iterator',
+    });
+
+    let hasMoreTiers = new sfn.Choice(this, 'HasMoreTiers?');
+    const processNextTierTask = new tasks.LambdaInvoke(this, 'ProcessNextTier', {
+      lambdaFunction: processTierFn,
+      payloadResponseOnly: true,
+      resultPath: '$.iterator',
+    });
+    processNextTierTask.next(hasMoreTiers);
+
+    const success = new sfn.Succeed(this, 'Done');
+
+    hasMoreTiers.when(sfn.Condition.booleanEquals('$.iterator.done', true), success)
+      .when(sfn.Condition.booleanEquals('$.iterator.done', false), processNextTierTask);
+
+
+    const processStackDefinition = queryStackTask
+      .next(hasMoreTiers);    
     
+    const processStackSm = new sfn.StateMachine(this, 'ProcessStack', {
+      definition: processStackDefinition
+    });
+
   }
 }

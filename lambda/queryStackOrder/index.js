@@ -6,10 +6,11 @@ const DEFAULT_TIERS = {
 exports.handler =  function(event, context, cb) {
     let action = event.action;
     let tiers = DEFAULT_TIERS[action];
+    let index = event.index || 0;
 
     cb(null, {
         tiers: tiers,
-        index: 0,
-        nextTier: tiers[0]
+        index: index,
+        done: index >= tiers.length
     });
 }
