@@ -8,6 +8,8 @@ import * as path from 'path';
 import { EventsRuleToLambdaProps, EventsRuleToLambda } from '@aws-solutions-constructs/aws-events-rule-lambda';
 import * as sfn from '@aws-cdk/aws-stepfunctions';
 import * as tasks from '@aws-cdk/aws-stepfunctions-tasks';
+const { LambdaToSqsToLambda } = require('@aws-solutions-constructs/aws-lambda-sqs-lambda');
+
 
 const ENV_PROPS = {
   env: { 
@@ -109,7 +111,7 @@ export class CdkStack extends cdk.Stack {
       handler: 'index.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/describeInstances')),
     });
-    describeInstancesFn.role?.addToPolicy(new iam.PolicyStatement({
+    describeInstancesFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         resources: ['*'],
         actions: ['ec2:describeInstances'],
@@ -157,11 +159,10 @@ export class CdkStack extends cdk.Stack {
     });
     processNextTierTask.next(hasMoreTiers);
 
-    const success = new sfn.Succeed(this, 'Done');
+    const done = new sfn.Succeed(this, 'Done');
 
-    hasMoreTiers.when(sfn.Condition.booleanEquals('$.iterator.done', true), success)
+    hasMoreTiers.when(sfn.Condition.booleanEquals('$.iterator.done', true), done)
       .when(sfn.Condition.booleanEquals('$.iterator.done', false), processNextTierTask);
-
 
     const processStackDefinition = queryStackTask
       .next(hasMoreTiers);    
@@ -170,5 +171,42 @@ export class CdkStack extends cdk.Stack {
       definition: processStackDefinition
     });
 
+    let lambdaToSqsToLambda = new LambdaToSqsToLambda(this, 'InstanceActions', {
+      producerLambdaFunctionProps: {
+          runtime: lambda.Runtime.NODEJS_12_X,
+          handler: 'index.handler',
+          code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processInstancesActions'))
+      },
+      consumerLambdaFunctionProps: {
+        runtime: lambda.Runtime.NODEJS_12_X,
+        handler: 'index.handler',
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processInstanceAction'))
+      }
+    });
+
+
+    const queryNextInstancesTask = new tasks.LambdaInvoke(this, 'QueryNextInstances', {
+      lambdaFunction: describeInstancesFn,
+      payloadResponseOnly: true,
+      resultPath: '$.instances',
+    });
+
+    const processInstanceActionsTask = new tasks.LambdaInvoke(this, 'ProcessInstanceActions', {
+      lambdaFunction: lambdaToSqsToLambda.consumerLambdaFunction,
+      payloadResponseOnly: true,
+    });
+    processInstanceActionsTask.next(queryNextInstancesTask);
+
+    const success = new sfn.Succeed(this, 'Success');
+    let anyInstanceToProcess = new sfn.Choice(this, 'AnyInstanceToProcess?');
+    anyInstanceToProcess.when(sfn.Condition.booleanEquals('$.iterator.done', true), success)
+      .when(sfn.Condition.booleanEquals('$.iterator.done', false), processInstanceActionsTask);
+
+    const processTierDefinition = queryNextInstancesTask
+      .next(anyInstanceToProcess);    
+    
+    const processTierSm = new sfn.StateMachine(this, 'ProcessTier', {
+      definition: processTierDefinition
+    });
   }
 }

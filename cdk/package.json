@@ -28,6 +28,7 @@
     "@aws-cdk/aws-stepfunctions-tasks": "^1.62.0",
     "@aws-cdk/core": "1.62.0",
     "@aws-solutions-constructs/aws-events-rule-lambda": "^1.62.0",
+    "@aws-solutions-constructs/aws-lambda-sqs-lambda": "^1.62.0",
     "aws-sdk": "^2.751.0",
     "source-map-support": "^0.5.16"
   }
