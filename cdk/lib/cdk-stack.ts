@@ -119,7 +119,7 @@ export class CdkStack extends cdk.Stack {
   
     new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
       lambdaFunctionProps: {
-        code: lambda.Code.asset(path.join(__dirname, '..', '..', 'lambda/instanceStateChanged')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/instanceStateChanged')),
         runtime: lambda.Runtime.NODEJS_12_X,
         handler: 'index.handler'
       },
@@ -175,7 +175,10 @@ export class CdkStack extends cdk.Stack {
       producerLambdaFunctionProps: {
           runtime: lambda.Runtime.NODEJS_12_X,
           handler: 'index.handler',
-          code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processInstancesActions'))
+          environment: {
+            TEST: 'XXX'
+          },
+          code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processInstancesAction')),
       },
       consumerLambdaFunctionProps: {
         runtime: lambda.Runtime.NODEJS_12_X,
@@ -183,24 +186,26 @@ export class CdkStack extends cdk.Stack {
         code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processInstanceAction'))
       }
     });
-
+    lambdaToSqsToLambda.producerLambdaFunction.addEnvironment(
+      'QUEUE_URL', lambdaToSqsToLambda.sqsQueue.queueUrl
+    );
 
     const queryNextInstancesTask = new tasks.LambdaInvoke(this, 'QueryNextInstances', {
       lambdaFunction: describeInstancesFn,
-      payloadResponseOnly: true,
-      resultPath: '$.instances',
+      payloadResponseOnly: true
     });
 
-    const processInstanceActionsTask = new tasks.LambdaInvoke(this, 'ProcessInstanceActions', {
-      lambdaFunction: lambdaToSqsToLambda.consumerLambdaFunction,
+    const processInstancesActionTask = new tasks.LambdaInvoke(this, 'ProcessInstancesAction', {
+      lambdaFunction: lambdaToSqsToLambda.producerLambdaFunction,
       payloadResponseOnly: true,
+      resultPath: sfn.JsonPath.DISCARD
     });
-    processInstanceActionsTask.next(queryNextInstancesTask);
+    processInstancesActionTask.next(queryNextInstancesTask);
 
     const success = new sfn.Succeed(this, 'Success');
     let anyInstanceToProcess = new sfn.Choice(this, 'AnyInstanceToProcess?');
-    anyInstanceToProcess.when(sfn.Condition.booleanEquals('$.iterator.done', true), success)
-      .when(sfn.Condition.booleanEquals('$.iterator.done', false), processInstanceActionsTask);
+    anyInstanceToProcess.when(sfn.Condition.booleanEquals('$.done', true), success)
+      .when(sfn.Condition.booleanEquals('$.done', false), processInstancesActionTask);
 
     const processTierDefinition = queryNextInstancesTask
       .next(anyInstanceToProcess);    

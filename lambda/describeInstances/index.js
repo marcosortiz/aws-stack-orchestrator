@@ -62,7 +62,11 @@ exports.handler =  function(event, context, cb) {
             });
 
             console.log(`returning instances: ${instances}`);
-            if(cb) cb(null, instances);
+            if(cb) cb(null, {
+                action: event.action,
+                instances: instances,
+                done: instances.length <= 0
+            });
         }
     });
 }
