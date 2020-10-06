@@ -1,8 +1,8 @@
 exports.handler =  function(event, context, cb) {
-    let tier = event.iterator.nextTier;
     let index = event.iterator.index;
+    let tier = event.iterator.tiers[index];
 
-    console.log(`Processing ${tier} ...`)
+    console.log(`TODO: Publish event - Processing ${tier} ...`)
     index += 1;
 
     let data = {

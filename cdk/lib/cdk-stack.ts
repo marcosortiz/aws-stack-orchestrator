@@ -120,6 +120,11 @@ export class CdkStack extends cdk.Stack {
       ],
     });
 
+    const instancesTable = new dynamodb.Table(this, "requests", {
+      partitionKey: {name: 'id', type: dynamodb.AttributeType.STRING},
+      sortKey: {name: 'sk', type: dynamodb.AttributeType.STRING}
+    });
+
     let queryNextInstancesFn = new lambda.Function(this, 'queryNextInstances', {
       runtime: lambda.Runtime.NODEJS_12_X,
       handler: 'index.handler',
@@ -159,11 +164,46 @@ export class CdkStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processNextTier')),
     });
 
+    let deleteStackRequestFn = new lambda.Function(this, 'deleteStackRequest', {
+      runtime: lambda.Runtime.NODEJS_12_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/deleteStackRequest')),
+    });
+    deleteStackRequestFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [instancesTable.tableArn],
+        actions: ['dynamodb:DeleteItem'],
+    }));
+    deleteStackRequestFn.addEnvironment(
+      'TABLE_NAME', instancesTable.tableName
+    );
+
     const queryStackTask = new tasks.LambdaInvoke(this, 'QueryStack', {
       lambdaFunction: queryStackOrderFn,
       payloadResponseOnly: true,
       resultPath: '$.iterator',
     });
+
+    const putStackRequestTask = new tasks.DynamoPutItem(this, 'putStackRequest', {
+      item: {
+        id: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.stackId')),
+        sk: tasks.DynamoAttributeValue.fromString('request'),
+        action: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.action')),
+        startedAt: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.iterator.startedAt'))
+      },
+      conditionExpression: "attribute_not_exists(id)",
+      table: instancesTable,
+      resultPath: sfn.JsonPath.DISCARD
+    });
+
+    const done = new sfn.Succeed(this, 'Done');
+
+    const deleteStackRequestTask = new tasks.LambdaInvoke(this, 'DeleteStackRequest', {
+      lambdaFunction: deleteStackRequestFn,
+      payloadResponseOnly: true,
+      resultPath: sfn.JsonPath.DISCARD,
+    });
+    deleteStackRequestTask.next(done);
 
     let hasMoreTiers = new sfn.Choice(this, 'HasMoreTiers?');
     const processNextTierTask = new tasks.LambdaInvoke(this, 'ProcessNextTier', {
@@ -173,12 +213,11 @@ export class CdkStack extends cdk.Stack {
     });
     processNextTierTask.next(hasMoreTiers);
 
-    const done = new sfn.Succeed(this, 'Done');
-
-    hasMoreTiers.when(sfn.Condition.booleanEquals('$.iterator.done', true), done)
+    hasMoreTiers.when(sfn.Condition.booleanEquals('$.iterator.done', true), deleteStackRequestTask)
       .when(sfn.Condition.booleanEquals('$.iterator.done', false), processNextTierTask);
 
     const processStackDefinition = queryStackTask
+      .next(putStackRequestTask)
       .next(hasMoreTiers);    
     
     const processStackSm = new sfn.StateMachine(this, 'ProcessStack', {
@@ -226,11 +265,6 @@ export class CdkStack extends cdk.Stack {
     
     const processTierSm = new sfn.StateMachine(this, 'ProcessTier', {
       definition: processTierDefinition
-    });
-  
-    const instancesTable = new dynamodb.Table(this, "requests", {
-      partitionKey: {name: 'id', type: dynamodb.AttributeType.STRING},
-      sortKey: {name: 'sk', type: dynamodb.AttributeType.STRING}
     });
 
     const ec2AutomationBus = new events.EventBus(this, 'Ec2Automation', {});
