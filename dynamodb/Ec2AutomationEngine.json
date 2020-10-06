@@ -1,0 +1,219 @@
+{
+  "ModelName": "Ec2AutomationEngine",
+  "ModelMetadata": {
+    "Author": "Marcos Ortiz",
+    "DateCreated": "Sep 13, 2020, 10:43 AM",
+    "DateLastModified": "Sep 30, 2020, 04:54 AM",
+    "Description": "",
+    "Version": "1.0"
+  },
+  "DataModel": [
+    {
+      "TableName": "Requests",
+      "KeyAttributes": {
+        "PartitionKey": {
+          "AttributeName": "id",
+          "AttributeType": "S"
+        },
+        "SortKey": {
+          "AttributeName": "type",
+          "AttributeType": "S"
+        }
+      },
+      "NonKeyAttributes": [
+        {
+          "AttributeName": "action",
+          "AttributeType": "S"
+        },
+        {
+          "AttributeName": "startedAt",
+          "AttributeType": "N"
+        },
+        {
+          "AttributeName": "processedAt",
+          "AttributeType": "N"
+        },
+        {
+          "AttributeName": "finishedAt",
+          "AttributeType": "N"
+        },
+        {
+          "AttributeName": "count",
+          "AttributeType": "N"
+        },
+        {
+          "AttributeName": "total",
+          "AttributeType": "N"
+        }
+      ],
+      "TableFacets": [
+        {
+          "FacetName": "requests",
+          "KeyAttributeAlias": {
+            "PartitionKeyAlias": "requestId",
+            "SortKeyAlias": "type"
+          },
+          "TableData": [
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "request-0"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "0"
+              },
+              "finishedAt": {
+                "N": "100"
+              },
+              "count": {
+                "N": "2"
+              },
+              "total": {
+                "N": "2"
+              }
+            },
+            {
+              "id": {
+                "S": "456"
+              },
+              "type": {
+                "S": "request-200"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "200"
+              },
+              "finishedAt": {
+                "N": "300"
+              },
+              "count": {
+                "N": "2"
+              },
+              "total": {
+                "N": "2"
+              }
+            }
+          ],
+          "NonKeyAttributes": [
+            "action",
+            "startedAt",
+            "finishedAt",
+            "count",
+            "total"
+          ],
+          "DataAccess": {
+            "MySql": {}
+          }
+        },
+        {
+          "FacetName": "requestDetails",
+          "KeyAttributeAlias": {
+            "PartitionKeyAlias": "instanceId",
+            "SortKeyAlias": "type"
+          },
+          "TableData": [
+            {
+              "id": {
+                "S": "i-0f3da5efc3540a497"
+              },
+              "type": {
+                "S": "requestDetails-123-0"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "0"
+              },
+              "processedAt": {
+                "N": "50"
+              },
+              "finishedAt": {
+                "N": "90"
+              }
+            },
+            {
+              "id": {
+                "S": "i-0f3da5efc3540a497"
+              },
+              "type": {
+                "S": "requestDetails-123-20"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "20"
+              },
+              "processedAt": {
+                "N": "70"
+              },
+              "finishedAt": {
+                "N": "100"
+              }
+            },
+            {
+              "id": {
+                "S": "i-02f7e59a607efef23"
+              },
+              "type": {
+                "S": "requestDetails-456-200"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "200"
+              },
+              "processedAt": {
+                "N": "250"
+              },
+              "finishedAt": {
+                "N": "290"
+              }
+            },
+            {
+              "id": {
+                "S": "i-04536b3fd0c5faa1b"
+              },
+              "type": {
+                "S": "requestDetails-456-220"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "220"
+              },
+              "processedAt": {
+                "N": "270"
+              },
+              "finishedAt": {
+                "N": "300"
+              }
+            }
+          ],
+          "NonKeyAttributes": [
+            "action",
+            "startedAt",
+            "processedAt",
+            "finishedAt"
+          ],
+          "DataAccess": {
+            "MySql": {}
+          }
+        }
+      ],
+      "DataAccess": {
+        "MySql": {}
+      }
+    }
+  ]
+}
