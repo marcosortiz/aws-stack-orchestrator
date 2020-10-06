@@ -63,6 +63,8 @@ exports.handler =  function(event, context, cb) {
 
             console.log(`returning instances: ${instances}`);
             if(cb) cb(null, {
+                // stackId: event.stackId,
+                // tier: event.tier,
                 action: event.action,
                 instances: instances,
                 done: instances.length <= 0

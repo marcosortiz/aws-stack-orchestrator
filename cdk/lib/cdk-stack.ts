@@ -9,6 +9,8 @@ import { EventsRuleToLambdaProps, EventsRuleToLambda } from '@aws-solutions-cons
 import * as sfn from '@aws-cdk/aws-stepfunctions';
 import * as tasks from '@aws-cdk/aws-stepfunctions-tasks';
 const { LambdaToSqsToLambda } = require('@aws-solutions-constructs/aws-lambda-sqs-lambda');
+import * as dynamodb from '@aws-cdk/aws-dynamodb';
+import events = require('@aws-cdk/aws-events');
 
 
 const ENV_PROPS = {
@@ -46,6 +48,8 @@ export class CdkStack extends cdk.Stack {
       subnetId: myVpc.publicSubnets[0].subnetId,
       tags: [
         {key: "Name", value: "web1"},
+        {key: "Stack", value: "123"},
+        {key: "StackType", value: "3-tiered-web-app"},
         {key: "Tier", value: "web"},
         {key: "Env", value: "dev"},
       ],
@@ -57,6 +61,8 @@ export class CdkStack extends cdk.Stack {
       subnetId: myVpc.publicSubnets[0].subnetId,
       tags: [
         {key: "Name", value: "web2"},
+        {key: "Stack", value: "123"},
+        {key: "StackType", value: "3-tiered-web-app"},
         {key: "Tier", value: "web"},
         {key: "Env", value: "dev"},
       ],
@@ -68,6 +74,8 @@ export class CdkStack extends cdk.Stack {
       subnetId: myVpc.publicSubnets[0].subnetId,
       tags: [
         {key: "Name", value: "app1"},
+        {key: "Stack", value: "123"},
+        {key: "StackType", value: "3-tiered-web-app"},
         {key: "Tier", value: "app"},
         {key: "Env", value: "dev"},
       ],
@@ -79,6 +87,8 @@ export class CdkStack extends cdk.Stack {
       subnetId: myVpc.publicSubnets[0].subnetId,
       tags: [
         {key: "Name", value: "app2"},
+        {key: "Stack", value: "123"},
+        {key: "StackType", value: "3-tiered-web-app"},
         {key: "Tier", value: "app"},
         {key: "Env", value: "dev"},
       ],
@@ -90,6 +100,8 @@ export class CdkStack extends cdk.Stack {
       subnetId: myVpc.publicSubnets[0].subnetId,
       tags: [
         {key: "Name", value: "db1"},
+        {key: "Stack", value: "123"},
+        {key: "StackType", value: "3-tiered-web-app"},
         {key: "Tier", value: "db"},
         {key: "Env", value: "dev"},
       ],
@@ -101,17 +113,19 @@ export class CdkStack extends cdk.Stack {
       subnetId: myVpc.publicSubnets[0].subnetId,
       tags: [
         {key: "Name", value: "db2"},
+        {key: "Stack", value: "123"},
+        {key: "StackType", value: "3-tiered-web-app"},
         {key: "Tier", value: "db"},
         {key: "Env", value: "dev"},
       ],
     });
 
-    let describeInstancesFn = new lambda.Function(this, 'describeInstances', {
+    let queryNextInstancesFn = new lambda.Function(this, 'queryNextInstances', {
       runtime: lambda.Runtime.NODEJS_12_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/describeInstances')),
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/queryNextInstances')),
     });
-    describeInstancesFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+    queryNextInstancesFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         resources: ['*'],
         actions: ['ec2:describeInstances'],
@@ -119,7 +133,7 @@ export class CdkStack extends cdk.Stack {
   
     new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
       lambdaFunctionProps: {
-        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/instanceStateChanged')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/statusUpdate')),
         runtime: lambda.Runtime.NODEJS_12_X,
         handler: 'index.handler'
       },
@@ -133,16 +147,16 @@ export class CdkStack extends cdk.Stack {
       }
     });
 
-    let queryStackOrderFn = new lambda.Function(this, 'queryStackOrder', {
+    let queryStackOrderFn = new lambda.Function(this, 'queryStack', {
       runtime: lambda.Runtime.NODEJS_12_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/queryStackOrder')),
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/queryStack')),
     });
 
-    let processTierFn = new lambda.Function(this, 'processTier', {
+    let processNextTierFn = new lambda.Function(this, 'processNextTier', {
       runtime: lambda.Runtime.NODEJS_12_X,
       handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processTier')),
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processNextTier')),
     });
 
     const queryStackTask = new tasks.LambdaInvoke(this, 'QueryStack', {
@@ -153,7 +167,7 @@ export class CdkStack extends cdk.Stack {
 
     let hasMoreTiers = new sfn.Choice(this, 'HasMoreTiers?');
     const processNextTierTask = new tasks.LambdaInvoke(this, 'ProcessNextTier', {
-      lambdaFunction: processTierFn,
+      lambdaFunction: processNextTierFn,
       payloadResponseOnly: true,
       resultPath: '$.iterator',
     });
@@ -178,12 +192,12 @@ export class CdkStack extends cdk.Stack {
           environment: {
             TEST: 'XXX'
           },
-          code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processInstancesAction')),
+          code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/asyncProcessInstances')),
       },
       consumerLambdaFunctionProps: {
         runtime: lambda.Runtime.NODEJS_12_X,
         handler: 'index.handler',
-        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processInstanceAction'))
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/worker'))
       }
     });
     lambdaToSqsToLambda.producerLambdaFunction.addEnvironment(
@@ -191,11 +205,11 @@ export class CdkStack extends cdk.Stack {
     );
 
     const queryNextInstancesTask = new tasks.LambdaInvoke(this, 'QueryNextInstances', {
-      lambdaFunction: describeInstancesFn,
+      lambdaFunction: queryNextInstancesFn,
       payloadResponseOnly: true
     });
 
-    const processInstancesActionTask = new tasks.LambdaInvoke(this, 'ProcessInstancesAction', {
+    const processInstancesActionTask = new tasks.LambdaInvoke(this, 'AsyncProcessInstances', {
       lambdaFunction: lambdaToSqsToLambda.producerLambdaFunction,
       payloadResponseOnly: true,
       resultPath: sfn.JsonPath.DISCARD
@@ -203,7 +217,7 @@ export class CdkStack extends cdk.Stack {
     processInstancesActionTask.next(queryNextInstancesTask);
 
     const success = new sfn.Succeed(this, 'Success');
-    let anyInstanceToProcess = new sfn.Choice(this, 'AnyInstanceToProcess?');
+    let anyInstanceToProcess = new sfn.Choice(this, 'AnyInstance?');
     anyInstanceToProcess.when(sfn.Condition.booleanEquals('$.done', true), success)
       .when(sfn.Condition.booleanEquals('$.done', false), processInstancesActionTask);
 
@@ -213,5 +227,13 @@ export class CdkStack extends cdk.Stack {
     const processTierSm = new sfn.StateMachine(this, 'ProcessTier', {
       definition: processTierDefinition
     });
+  
+    const instancesTable = new dynamodb.Table(this, "requests", {
+      partitionKey: {name: 'id', type: dynamodb.AttributeType.STRING},
+      sortKey: {name: 'sk', type: dynamodb.AttributeType.STRING}
+    });
+
+    const ec2AutomationBus = new events.EventBus(this, 'Ec2Automation', {});
+
   }
 }

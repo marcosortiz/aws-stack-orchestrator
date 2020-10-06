@@ -8,7 +8,7 @@ AWS.config.region = REGION;
 
 var sqs = new SQS();
 
-function getParams(stackId, action, instances) {
+function getSqsParams(stackId, action, instances) {
     let params = {
         Entries: [
         ],
@@ -21,7 +21,7 @@ function getParams(stackId, action, instances) {
             Id: instanceId,
             DelaySeconds: DELAY_IN_SECS,
             MessageAttributes: {
-                "Stack": {
+                "stackId": {
                     DataType: "String",
                     StringValue: stackId
                 }
@@ -39,13 +39,14 @@ exports.handler =  function(event, context, cb) {
     let action = event.action;
     let instances = event.instances;
 
-    console.log(`Processing ${action} action on ${instances}`);
+    console.log(`Processing ${action} action on ${JSON.stringify(instances)}`);
 
-    let params = getParams('stack123', action, instances);
+    let params = getSqsParams('stack123', action, instances);
     console.log(JSON.stringify(params));
     sqs.sendMessageBatch(params, function(err, data){
         if (err) cb(err, null);
         else {
+            // TODO: check for indivitual error messages. It can only send up to 10 messages.
             if(cb) cb(null, data);
         }
     });
