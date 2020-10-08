@@ -7,7 +7,7 @@ const TIER_KEY =  "tag:Tier";
 const STATE_KEY = "instance-state-name";
 const FILTER_STATES = {
     'start': ['stopped'],
-    'stop': ['pending', 'running']
+    'stop': ['running']
 }
 
 AWS.config.region = REGION;
@@ -50,7 +50,7 @@ exports.handler =  function(event, context, cb) {
         MaxResults: MAX_RESULTS
     };
 
-    console.log(params);
+    console.log(JSON.stringify(params))
     ec2.describeInstances(params, function(err, data) {
         if (err) cb(err, null);
         else {
@@ -61,7 +61,8 @@ exports.handler =  function(event, context, cb) {
                 instances.push(hash);            
             });
 
-            console.log(`returning instances: ${instances}`);
+            console.log(`returning instances: ${JSON.stringify(instances)}`);
+            
             if(cb) cb(null, {
                 stackId: event.stackId,
                 tier: event.tier,

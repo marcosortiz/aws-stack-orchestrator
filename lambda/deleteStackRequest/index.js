@@ -16,10 +16,11 @@ function getRequestParams(data){
 
 var ddb = new DDB();
 exports.handler =  function(event, context, cb) {
+    let stackId = event[0].stackId;
     var params = {
         Key: {
          "id": {
-           S: event.stackId
+           S: stackId
           }, 
          "sk": {
            S: "request"
@@ -32,7 +33,7 @@ exports.handler =  function(event, context, cb) {
     ddb.deleteItem(params, function (err, data){
         if (err) cb(err, null);
         else {
-            console.log(`Successfully deleted stack ${event.stackId}.`);
+            console.log(`Successfully deleted stack ${stackId}.`);
             console.log("TODO: publish stack event: \n" + JSON.stringify(getRequestParams(data), null, 2));
             return "Done!";
         }

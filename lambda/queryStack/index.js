@@ -5,14 +5,21 @@ const DEFAULT_TIERS = {
 
 exports.handler =  function(event, context, cb) {
     let startedAt = new Date()/1000;
-    let action = event.action;
-    let tiers = DEFAULT_TIERS[action];
-    let index = event.index || 0;
+
+    let tiers = [];
+    DEFAULT_TIERS[event.action].forEach(function(tier) {
+        let hash  = {
+            stackId: event.stackId,
+            tier: tier,
+            action: event.action
+        }
+        tiers.push(hash);
+    });
 
     cb(null, {
-        tiers: tiers,
+        stackId: event.stackId,
+        action: event.action,
         startedAt: `${startedAt}`,
-        index: index,
-        done: index >= tiers.length
+        tiers: tiers
     });
 }

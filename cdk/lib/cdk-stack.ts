@@ -178,51 +178,10 @@ export class CdkStack extends cdk.Stack {
       'TABLE_NAME', instancesTable.tableName
     );
 
-    const queryStackTask = new tasks.LambdaInvoke(this, 'QueryStack', {
-      lambdaFunction: queryStackOrderFn,
-      payloadResponseOnly: true,
-      resultPath: '$.iterator',
-    });
 
-    const putStackRequestTask = new tasks.DynamoPutItem(this, 'putStackRequest', {
-      item: {
-        id: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.stackId')),
-        sk: tasks.DynamoAttributeValue.fromString('request'),
-        action: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.action')),
-        startedAt: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.iterator.startedAt'))
-      },
-      conditionExpression: "attribute_not_exists(id)",
-      table: instancesTable,
-      resultPath: sfn.JsonPath.DISCARD
-    });
 
-    const done = new sfn.Succeed(this, 'Done');
 
-    const deleteStackRequestTask = new tasks.LambdaInvoke(this, 'DeleteStackRequest', {
-      lambdaFunction: deleteStackRequestFn,
-      payloadResponseOnly: true,
-      resultPath: sfn.JsonPath.DISCARD,
-    });
-    deleteStackRequestTask.next(done);
 
-    let hasMoreTiers = new sfn.Choice(this, 'HasMoreTiers?');
-    const processNextTierTask = new tasks.LambdaInvoke(this, 'ProcessNextTier', {
-      lambdaFunction: processNextTierFn,
-      payloadResponseOnly: true,
-      resultPath: '$.iterator',
-    });
-    processNextTierTask.next(hasMoreTiers);
-
-    hasMoreTiers.when(sfn.Condition.booleanEquals('$.iterator.done', true), deleteStackRequestTask)
-      .when(sfn.Condition.booleanEquals('$.iterator.done', false), processNextTierTask);
-
-    const processStackDefinition = queryStackTask
-      .next(putStackRequestTask)
-      .next(hasMoreTiers);    
-    
-    const processStackSm = new sfn.StateMachine(this, 'ProcessStack', {
-      definition: processStackDefinition
-    });
 
     let lambdaToSqsToLambda = new LambdaToSqsToLambda(this, 'InstanceActions', {
       producerLambdaFunctionProps: {
@@ -269,7 +228,6 @@ export class CdkStack extends cdk.Stack {
     const processInstancesActionTask = new tasks.LambdaInvoke(this, 'AsyncProcessInstances', {
       lambdaFunction: lambdaToSqsToLambda.producerLambdaFunction,
       integrationPattern: sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
-      // payloadResponseOnly: true,
       payload: sfn.TaskInput.fromObject({
         token: sfn.JsonPath.taskToken,
         input: sfn.JsonPath.stringAt('$'),
@@ -289,6 +247,61 @@ export class CdkStack extends cdk.Stack {
     
     const processTierSm = new sfn.StateMachine(this, 'ProcessTier', {
       definition: processTierDefinition
+    });
+
+    const queryStackTask = new tasks.LambdaInvoke(this, 'QueryStack', {
+      lambdaFunction: queryStackOrderFn,
+      payloadResponseOnly: true,
+      resultPath: '$',
+    });
+
+    const putStackRequestTask = new tasks.DynamoPutItem(this, 'putStackRequest', {
+      item: {
+        id: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.stackId')),
+        sk: tasks.DynamoAttributeValue.fromString('request'),
+        action: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.action')),
+        startedAt: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.startedAt'))
+      },
+      conditionExpression: "attribute_not_exists(id)",
+      table: instancesTable,
+      resultPath: sfn.JsonPath.DISCARD
+    });
+
+    const done = new sfn.Succeed(this, 'Done');
+
+    const deleteStackRequestTask = new tasks.LambdaInvoke(this, 'DeleteStackRequest', {
+      lambdaFunction: deleteStackRequestFn,
+      payloadResponseOnly: true,
+      resultPath: sfn.JsonPath.DISCARD,
+    });
+    deleteStackRequestTask.next(done);
+
+    const processNextTierTask = new tasks.StepFunctionsStartExecution(this, 'ProcessNextTier', {
+      stateMachine: processTierSm,
+      integrationPattern: sfn.IntegrationPattern.REQUEST_RESPONSE,
+      input: sfn.TaskInput.fromObject({
+        "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": '$$.Execution.Id',
+        // token: sfn.JsonPath.taskToken,   
+        stackId: sfn.JsonPath.stringAt('$.stackId'),
+        tier: sfn.JsonPath.stringAt('$.tier'),
+        action: sfn.JsonPath.stringAt('$.action'),
+      }),
+      resultPath: sfn.JsonPath.DISCARD
+    });
+
+    const map = new sfn.Map(this, 'Map Tiers', {
+        maxConcurrency: 1,
+        itemsPath: sfn.JsonPath.stringAt('$.tiers')
+    });
+    map.iterator(processNextTierTask);
+
+    const processStackDefinition = queryStackTask
+      .next(putStackRequestTask)
+      .next(map)
+      .next(deleteStackRequestTask);
+
+    const processStackSm = new sfn.StateMachine(this, 'ProcessStack', {
+      definition: processStackDefinition
     });
 
     const ec2AutomationBus = new events.EventBus(this, 'Ec2Automation', {});
