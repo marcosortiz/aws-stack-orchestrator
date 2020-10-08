@@ -8,45 +8,51 @@ AWS.config.region = REGION;
 
 var sqs = new SQS();
 
-function getSqsParams(stackId, action, instances) {
+function getSqsParams(stackId, tier, action, instances, token) {
     let params = {
-        Entries: [
-        ],
+        DelaySeconds: DELAY_IN_SECS,
+        MessageAttributes: {
+            "stackId": {
+                DataType: "String",
+                StringValue: stackId
+            }
+        },
         QueueUrl: process.env.QUEUE_URL
     };
 
+    let instanceIds = [];
     instances.forEach(function(i) {
         let instanceId = i.instanceId;
-        let entry = {
-            Id: instanceId,
-            DelaySeconds: DELAY_IN_SECS,
-            MessageAttributes: {
-                "stackId": {
-                    DataType: "String",
-                    StringValue: stackId
-                }
-            },
-            MessageBody: JSON.stringify({action: action, instanceId: instanceId})
-        };
-        params['Entries'].push(entry);      
+        instanceIds.push(instanceId);
     });
-    
+    let body = {
+        stackId: stackId,
+        tier: tier,
+        action: action,
+        instanceIds: instanceIds,
+        token: token
+    }
+    params['MessageBody'] = JSON.stringify(body);
     return params;
 }
 
 exports.handler =  function(event, context, cb) {
 
-    let action = event.action;
-    let instances = event.instances;
+    console.log(JSON.stringify(event))
+
+    let stackId = event.input.stackId;
+    let tier = event.input.tier;
+    let action = event.input.action;
+    let instances = event.input.instances;
+    let token = event.token;
 
     console.log(`Processing ${action} action on ${JSON.stringify(instances)}`);
 
-    let params = getSqsParams('stack123', action, instances);
+    let params = getSqsParams(stackId, tier, action, instances, token);
     console.log(JSON.stringify(params));
-    sqs.sendMessageBatch(params, function(err, data){
+    sqs.sendMessage(params, function(err, data){
         if (err) cb(err, null);
         else {
-            // TODO: check for indivitual error messages. It can only send up to 10 messages.
             if(cb) cb(null, data);
         }
     });

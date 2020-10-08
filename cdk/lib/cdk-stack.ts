@@ -242,6 +242,24 @@ export class CdkStack extends cdk.Stack {
     lambdaToSqsToLambda.producerLambdaFunction.addEnvironment(
       'QUEUE_URL', lambdaToSqsToLambda.sqsQueue.queueUrl
     );
+    lambdaToSqsToLambda.consumerLambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [instancesTable.tableArn],
+      actions: ['dynamodb:PutItem'],
+    }));
+    lambdaToSqsToLambda.consumerLambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: ['*'],
+      actions: ['ec2:StartInstances', 'ec2:StopInstances'],
+    }));
+    lambdaToSqsToLambda.consumerLambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: ['*'],
+      actions: ['states:SendTaskSuccess', 'states:SendTaskFailure'],
+    }));
+    lambdaToSqsToLambda.consumerLambdaFunction.addEnvironment(
+      'TABLE_NAME', instancesTable.tableName
+    );
 
     const queryNextInstancesTask = new tasks.LambdaInvoke(this, 'QueryNextInstances', {
       lambdaFunction: queryNextInstancesFn,
@@ -250,7 +268,13 @@ export class CdkStack extends cdk.Stack {
 
     const processInstancesActionTask = new tasks.LambdaInvoke(this, 'AsyncProcessInstances', {
       lambdaFunction: lambdaToSqsToLambda.producerLambdaFunction,
-      payloadResponseOnly: true,
+      integrationPattern: sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
+      // payloadResponseOnly: true,
+      payload: sfn.TaskInput.fromObject({
+        token: sfn.JsonPath.taskToken,
+        input: sfn.JsonPath.stringAt('$'),
+      }),
+      timeout: cdk.Duration.minutes(1),
       resultPath: sfn.JsonPath.DISCARD
     });
     processInstancesActionTask.next(queryNextInstancesTask);
