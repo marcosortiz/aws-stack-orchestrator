@@ -163,6 +163,19 @@ export class CdkStack extends cdk.Stack {
       handler: 'index.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processNextTier')),
     });
+    // processNextTierFn.addEnvironment(
+    //   'SF_ARN', processTierSm.stateMachineArn
+    // );
+    // processNextTierFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+    //   effect: iam.Effect.ALLOW,
+    //   resources: [processTierSm.stateMachineArn],
+    //   actions: ['states:StartExecution'],
+    // }));
+    processNextTierFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [instancesTable.tableArn],
+      actions: ['dynamodb:PutItem'],
+    }));
 
     let deleteStackRequestFn = new lambda.Function(this, 'deleteStackRequest', {
       runtime: lambda.Runtime.NODEJS_12_X,
@@ -248,6 +261,18 @@ export class CdkStack extends cdk.Stack {
     const processTierSm = new sfn.StateMachine(this, 'ProcessTier', {
       definition: processTierDefinition
     });
+    processNextTierFn.addEnvironment(
+      'SF_ARN', processTierSm.stateMachineArn
+    );
+    processNextTierFn.addEnvironment(
+      'TABLE_NAME', instancesTable.tableName
+    );
+    processNextTierFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [processTierSm.stateMachineArn],
+      actions: ['states:StartExecution'],
+    }));
+
 
     const queryStackTask = new tasks.LambdaInvoke(this, 'QueryStack', {
       lambdaFunction: queryStackOrderFn,
@@ -258,9 +283,11 @@ export class CdkStack extends cdk.Stack {
     const putStackRequestTask = new tasks.DynamoPutItem(this, 'putStackRequest', {
       item: {
         id: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.stackId')),
-        sk: tasks.DynamoAttributeValue.fromString('request'),
+        sk: tasks.DynamoAttributeValue.fromString('stack'),
         action: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.action')),
-        startedAt: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.startedAt'))
+        startedAt: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.startedAt')),
+        count: tasks.DynamoAttributeValue.fromNumber(0),
+        total: tasks.DynamoAttributeValue.fromNumber(0)
       },
       conditionExpression: "attribute_not_exists(id)",
       table: instancesTable,
@@ -276,18 +303,32 @@ export class CdkStack extends cdk.Stack {
     });
     deleteStackRequestTask.next(done);
 
-    const processNextTierTask = new tasks.StepFunctionsStartExecution(this, 'ProcessNextTier', {
-      stateMachine: processTierSm,
-      integrationPattern: sfn.IntegrationPattern.REQUEST_RESPONSE,
-      input: sfn.TaskInput.fromObject({
-        "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": '$$.Execution.Id',
-        // token: sfn.JsonPath.taskToken,   
-        stackId: sfn.JsonPath.stringAt('$.stackId'),
-        tier: sfn.JsonPath.stringAt('$.tier'),
-        action: sfn.JsonPath.stringAt('$.action'),
+    // const processNextTierTask = new tasks.StepFunctionsStartExecution(this, 'ProcessNextTier', {
+    //   stateMachine: processTierSm,
+    //   integrationPattern: sfn.IntegrationPattern.REQUEST_RESPONSE,
+    //   input: sfn.TaskInput.fromObject({
+    //     "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": '$$.Execution.Id',
+    //     // token: sfn.JsonPath.taskToken,   
+    //     stackId: sfn.JsonPath.stringAt('$.stackId'),
+    //     tier: sfn.JsonPath.stringAt('$.tier'),
+    //     action: sfn.JsonPath.stringAt('$.action'),
+    //   }),
+    //   resultPath: sfn.JsonPath.DISCARD
+    // });
+
+    const processNextTierTask = new tasks.LambdaInvoke(this, 'ProcessNextTier', {
+      lambdaFunction: processNextTierFn,
+      integrationPattern: sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
+      payload: sfn.TaskInput.fromObject({
+        token: sfn.JsonPath.taskToken,
+        input: sfn.JsonPath.stringAt('$'),
       }),
+      timeout: cdk.Duration.minutes(10),
       resultPath: sfn.JsonPath.DISCARD
     });
+
+
+
 
     const map = new sfn.Map(this, 'Map Tiers', {
         maxConcurrency: 1,

@@ -23,7 +23,7 @@ exports.handler =  function(event, context, cb) {
            S: stackId
           }, 
          "sk": {
-           S: "request"
+           S: "stack"
           }
         }, 
         ReturnValues: 'ALL_OLD',

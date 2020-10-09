@@ -3,7 +3,7 @@
   "ModelMetadata": {
     "Author": "Marcos Ortiz",
     "DateCreated": "Sep 13, 2020, 10:43 AM",
-    "DateLastModified": "Sep 30, 2020, 04:54 AM",
+    "DateLastModified": "Oct 09, 2020, 10:54 AM",
     "Description": "",
     "Version": "1.0"
   },
@@ -44,13 +44,21 @@
         {
           "AttributeName": "total",
           "AttributeType": "N"
+        },
+        {
+          "AttributeName": "token",
+          "AttributeType": "S"
+        },
+        {
+          "AttributeName": "instanceId",
+          "AttributeType": "S"
         }
       ],
       "TableFacets": [
         {
-          "FacetName": "requests",
+          "FacetName": "stacks",
           "KeyAttributeAlias": {
-            "PartitionKeyAlias": "requestId",
+            "PartitionKeyAlias": "id",
             "SortKeyAlias": "type"
           },
           "TableData": [
@@ -59,7 +67,7 @@
                 "S": "123"
               },
               "type": {
-                "S": "request-0"
+                "S": "stack"
               },
               "action": {
                 "S": "start"
@@ -68,36 +76,13 @@
                 "N": "0"
               },
               "finishedAt": {
-                "N": "100"
+                "N": "8999"
               },
               "count": {
-                "N": "2"
+                "N": "6"
               },
               "total": {
-                "N": "2"
-              }
-            },
-            {
-              "id": {
-                "S": "456"
-              },
-              "type": {
-                "S": "request-200"
-              },
-              "action": {
-                "S": "start"
-              },
-              "startedAt": {
-                "N": "200"
-              },
-              "finishedAt": {
-                "N": "300"
-              },
-              "count": {
-                "N": "2"
-              },
-              "total": {
-                "N": "2"
+                "N": "6"
               }
             }
           ],
@@ -113,18 +98,18 @@
           }
         },
         {
-          "FacetName": "requestDetails",
+          "FacetName": "tiers",
           "KeyAttributeAlias": {
-            "PartitionKeyAlias": "instanceId",
+            "PartitionKeyAlias": "stackId",
             "SortKeyAlias": "type"
           },
           "TableData": [
             {
               "id": {
-                "S": "i-0f3da5efc3540a497"
+                "S": "123"
               },
               "type": {
-                "S": "requestDetails-123-0"
+                "S": "tier-123-web"
               },
               "action": {
                 "S": "start"
@@ -133,70 +118,59 @@
                 "N": "0"
               },
               "processedAt": {
-                "N": "50"
+                "N": "1"
               },
               "finishedAt": {
-                "N": "90"
+                "N": "2999"
+              },
+              "token": {
+                "S": "aaa"
               }
             },
             {
               "id": {
-                "S": "i-0f3da5efc3540a497"
+                "S": "123"
               },
               "type": {
-                "S": "requestDetails-123-20"
+                "S": "tier-123-app"
               },
               "action": {
                 "S": "start"
               },
               "startedAt": {
-                "N": "20"
+                "N": "3000"
               },
               "processedAt": {
-                "N": "70"
+                "N": "1"
               },
               "finishedAt": {
-                "N": "100"
+                "N": "5999"
+              },
+              "token": {
+                "S": "bbb"
               }
             },
             {
               "id": {
-                "S": "i-02f7e59a607efef23"
+                "S": "123"
               },
               "type": {
-                "S": "requestDetails-456-200"
+                "S": "tier-123-db"
               },
               "action": {
                 "S": "start"
               },
               "startedAt": {
-                "N": "200"
+                "N": "6000"
               },
               "processedAt": {
-                "N": "250"
+                "N": "1"
               },
               "finishedAt": {
-                "N": "290"
-              }
-            },
-            {
-              "id": {
-                "S": "i-04536b3fd0c5faa1b"
+                "N": "8999"
               },
-              "type": {
-                "S": "requestDetails-456-220"
-              },
-              "action": {
-                "S": "start"
-              },
-              "startedAt": {
-                "N": "220"
-              },
-              "processedAt": {
-                "N": "270"
-              },
-              "finishedAt": {
-                "N": "300"
+              "token": {
+                "S": "ccc"
               }
             }
           ],
@@ -204,6 +178,145 @@
             "action",
             "startedAt",
             "processedAt",
+            "finishedAt",
+            "token"
+          ],
+          "DataAccess": {
+            "MySql": {}
+          }
+        },
+        {
+          "FacetName": "instances",
+          "KeyAttributeAlias": {
+            "PartitionKeyAlias": "stackId",
+            "SortKeyAlias": "type"
+          },
+          "TableData": [
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-web"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "0"
+              },
+              "finishedAt": {
+                "N": "1000"
+              },
+              "instanceId": {
+                "S": "i-0e5733dc7f4fd3e31"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-web"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "2000"
+              },
+              "finishedAt": {
+                "N": "2999"
+              },
+              "instanceId": {
+                "S": "i-0e5733dc7f4fd3e32"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-app"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "3000"
+              },
+              "finishedAt": {
+                "N": "4000"
+              },
+              "instanceId": {
+                "S": "i-0e5733dc7f4fd3e33"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-app"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "5000"
+              },
+              "finishedAt": {
+                "N": "5999"
+              },
+              "instanceId": {
+                "S": "i-0e5733dc7f4fd3e34"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-db"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "6000"
+              },
+              "finishedAt": {
+                "N": "7000"
+              },
+              "instanceId": {
+                "S": "i-0e5733dc7f4fd3e35"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-db"
+              },
+              "action": {
+                "S": "start"
+              },
+              "startedAt": {
+                "N": "8000"
+              },
+              "finishedAt": {
+                "N": "8999"
+              },
+              "instanceId": {
+                "S": "i-0e5733dc7f4fd3e36"
+              }
+            }
+          ],
+          "NonKeyAttributes": [
+            "instanceId",
+            "action",
+            "startedAt",
             "finishedAt"
           ],
           "DataAccess": {
