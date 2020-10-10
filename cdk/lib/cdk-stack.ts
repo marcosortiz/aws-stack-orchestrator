@@ -217,7 +217,7 @@ export class CdkStack extends cdk.Stack {
     lambdaToSqsToLambda.consumerLambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       resources: [instancesTable.tableArn],
-      actions: ['dynamodb:PutItem'],
+      actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem'],
     }));
     lambdaToSqsToLambda.consumerLambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,

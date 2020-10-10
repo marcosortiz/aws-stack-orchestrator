@@ -41,7 +41,7 @@ function registerToken(ddb, event, cb) {
     });
 }
 
-function startExecution(sf, event){
+function startExecution(sf, event, cb){
     let params = {
         stateMachineArn: process.env.SF_ARN,
         input: JSON.stringify(event.input),
@@ -63,8 +63,12 @@ exports.handler =  function(event, context, cb) {
     registerToken(ddb, event, function(err, data) {
         if (err) cb(err, null);
         else {
-            startExecution(sf, event);
-            return '{}';
+            startExecution(sf, event, function(err2, data2){
+                if (err) cb(err2, null);
+                else {
+                    cb(null, data2);
+                }        
+            });
         }
     });
 }
