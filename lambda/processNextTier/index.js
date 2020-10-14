@@ -23,6 +23,12 @@ function registerToken(ddb, event, cb) {
             "startedAt": {
                 S: `${new Date()/1000}`
             },
+            "count": {
+                N: "0"
+            },
+            "total": {
+                N: "0"
+            },
             "token": {
                 S: event.token
             }

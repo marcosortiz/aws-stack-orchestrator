@@ -3,7 +3,7 @@
   "ModelMetadata": {
     "Author": "Marcos Ortiz",
     "DateCreated": "Sep 13, 2020, 10:43 AM",
-    "DateLastModified": "Oct 09, 2020, 07:08 PM",
+    "DateLastModified": "Oct 13, 2020, 02:42 PM",
     "Description": "",
     "Version": "1.0"
   },
@@ -51,6 +51,14 @@
         },
         {
           "AttributeName": "instanceId",
+          "AttributeType": "S"
+        },
+        {
+          "AttributeName": "tier",
+          "AttributeType": "S"
+        },
+        {
+          "AttributeName": "stackId",
           "AttributeType": "S"
         }
       ],
@@ -186,7 +194,7 @@
           }
         },
         {
-          "FacetName": "instances",
+          "FacetName": "stackInstances",
           "KeyAttributeAlias": {
             "PartitionKeyAlias": "stackId",
             "SortKeyAlias": "type"
@@ -314,10 +322,110 @@
             }
           ],
           "NonKeyAttributes": [
-            "instanceId",
             "action",
             "startedAt",
-            "finishedAt"
+            "finishedAt",
+            "instanceId"
+          ],
+          "DataAccess": {
+            "MySql": {}
+          }
+        },
+        {
+          "FacetName": "instances",
+          "KeyAttributeAlias": {
+            "PartitionKeyAlias": "id",
+            "SortKeyAlias": "instance"
+          },
+          "TableData": [
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-i-0e5733dc7f4fd3e31"
+              },
+              "tier": {
+                "S": "web"
+              },
+              "stackId": {
+                "S": "123"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-i-0e5733dc7f4fd3e32"
+              },
+              "tier": {
+                "S": "web"
+              },
+              "stackId": {
+                "S": "123"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-i-0e5733dc7f4fd3e33"
+              },
+              "tier": {
+                "S": "app"
+              },
+              "stackId": {
+                "S": "123"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-i-0e5733dc7f4fd3e34"
+              },
+              "tier": {
+                "S": "app"
+              },
+              "stackId": {
+                "S": "123"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-i-0e5733dc7f4fd3e35"
+              },
+              "tier": {
+                "S": "db"
+              },
+              "stackId": {
+                "S": "123"
+              }
+            },
+            {
+              "id": {
+                "S": "123"
+              },
+              "type": {
+                "S": "instance-i-0e5733dc7f4fd3e36"
+              },
+              "tier": {
+                "S": "db"
+              },
+              "stackId": {
+                "S": "123"
+              }
+            }
+          ],
+          "NonKeyAttributes": [
+            "stackId",
+            "tier"
           ],
           "DataAccess": {
             "MySql": {}

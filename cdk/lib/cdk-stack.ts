@@ -5,7 +5,7 @@ import iam = require('@aws-cdk/aws-iam');
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as eventTargets from '@aws-cdk/aws-events-targets';
 import * as path from 'path';
-import { EventsRuleToLambdaProps, EventsRuleToLambda } from '@aws-solutions-constructs/aws-events-rule-lambda';
+import { EventsRuleToLambda } from '@aws-solutions-constructs/aws-events-rule-lambda';
 import * as sfn from '@aws-cdk/aws-stepfunctions';
 import * as tasks from '@aws-cdk/aws-stepfunctions-tasks';
 const { LambdaToSqsToLambda } = require('@aws-solutions-constructs/aws-lambda-sqs-lambda');
@@ -136,9 +136,11 @@ export class CdkStack extends cdk.Stack {
         actions: ['ec2:describeInstances'],
     }));;
   
-    new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
+    const ec2AutomationBus = new events.EventBus(this, 'Ec2Automation', {});
+
+    const eventsRuleToLambda = new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
       lambdaFunctionProps: {
-        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/statusUpdate')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stateChangeTracker')),
         runtime: lambda.Runtime.NODEJS_12_X,
         handler: 'index.handler'
       },
@@ -151,6 +153,55 @@ export class CdkStack extends cdk.Stack {
         }
       }
     });
+    eventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [ec2AutomationBus.eventBusArn],
+      actions: ['events:PutEvents'],
+    }));
+    eventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [instancesTable.tableArn],
+      actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
+    }));
+    eventsRuleToLambda.lambdaFunction.addEnvironment(
+      'TABLE_NAME', instancesTable.tableName
+    );
+    eventsRuleToLambda.lambdaFunction.addEnvironment(
+      'EVENT_BUS_NAME', ec2AutomationBus.eventBusName
+    );
+
+    const stackOrchestrationEventsRuleToLambda = new EventsRuleToLambda(this, 'stack-state-changed', {
+      lambdaFunctionProps: {
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackStateChanged')),
+        runtime: lambda.Runtime.NODEJS_12_X,
+        handler: 'index.handler'
+      },
+      eventRuleProps: {
+        // eventBus: ec2AutomationBus,
+        description: 'Tracks stack state changes',
+        enabled: true,
+        eventPattern: {
+          detailType: ["EC2 Instance State-change Notification"],
+          source: [ "stackOrchestrator" ]
+        }
+      }
+    });
+    stackOrchestrationEventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [ec2AutomationBus.eventBusArn],
+      actions: ['events:PutEvents'],
+    }));
+    stackOrchestrationEventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [instancesTable.tableArn],
+      actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
+    }));
+    stackOrchestrationEventsRuleToLambda.lambdaFunction.addEnvironment(
+      'TABLE_NAME', instancesTable.tableName
+    );
+    stackOrchestrationEventsRuleToLambda.lambdaFunction.addEnvironment(
+      'EVENT_BUS_NAME', ec2AutomationBus.eventBusName
+    );
 
     let queryStackOrderFn = new lambda.Function(this, 'queryStack', {
       runtime: lambda.Runtime.NODEJS_12_X,
@@ -163,14 +214,6 @@ export class CdkStack extends cdk.Stack {
       handler: 'index.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/processNextTier')),
     });
-    // processNextTierFn.addEnvironment(
-    //   'SF_ARN', processTierSm.stateMachineArn
-    // );
-    // processNextTierFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
-    //   effect: iam.Effect.ALLOW,
-    //   resources: [processTierSm.stateMachineArn],
-    //   actions: ['states:StartExecution'],
-    // }));
     processNextTierFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       resources: [instancesTable.tableArn],
@@ -190,11 +233,6 @@ export class CdkStack extends cdk.Stack {
     deleteStackRequestFn.addEnvironment(
       'TABLE_NAME', instancesTable.tableName
     );
-
-
-
-
-
 
     let lambdaToSqsToLambda = new LambdaToSqsToLambda(this, 'InstanceActions', {
       producerLambdaFunctionProps: {
@@ -238,6 +276,10 @@ export class CdkStack extends cdk.Stack {
       payloadResponseOnly: true
     });
 
+    const wait = new sfn.Wait(this, 'Wait For Trigger Time', {
+      time: sfn.WaitTime.duration(cdk.Duration.seconds(3)),
+    });
+
     const processInstancesActionTask = new tasks.LambdaInvoke(this, 'AsyncProcessInstances', {
       lambdaFunction: lambdaToSqsToLambda.producerLambdaFunction,
       integrationPattern: sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
@@ -248,7 +290,8 @@ export class CdkStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(1),
       resultPath: sfn.JsonPath.DISCARD
     });
-    processInstancesActionTask.next(queryNextInstancesTask);
+    processInstancesActionTask.next(wait);
+    wait.next(queryNextInstancesTask);
 
     const success = new sfn.Succeed(this, 'Success');
     let anyInstanceToProcess = new sfn.Choice(this, 'AnyInstance?');
@@ -344,8 +387,6 @@ export class CdkStack extends cdk.Stack {
     const processStackSm = new sfn.StateMachine(this, 'ProcessStack', {
       definition: processStackDefinition
     });
-
-    const ec2AutomationBus = new events.EventBus(this, 'Ec2Automation', {});
 
   }
 }

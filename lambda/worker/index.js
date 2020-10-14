@@ -64,8 +64,29 @@ function recordInstances(ddb, params, cb) {
             }
         };
         ddbParams.TransactItems.push(putItem);
+        let putInstance = {
+            Put: {
+                TableName: process.env.TABLE_NAME,
+                Item: {
+                    "id": {
+                        S: instanceId
+                    }, 
+                    "sk": {
+                        S: `instance`
+                    }, 
+                    "tier": {
+                        S: params.tier
+                    },
+                    "stackId": {
+                        S: params.stackId
+                    }
+                }//,
+                // ConditionExpression: "attribute_not_exists(id)"
+            }
+        };
+        ddbParams.TransactItems.push(putInstance);
     });
-    let updateItem = {
+    let stackUpdateItem = {
         Update: {
             TableName: process.env.TABLE_NAME, 
             ExpressionAttributeNames: {
@@ -87,12 +108,37 @@ function recordInstances(ddb, params, cb) {
             UpdateExpression: "SET #T = #T + :inc"
         }
     };
-    ddbParams.TransactItems.push(updateItem);
+    ddbParams.TransactItems.push(stackUpdateItem);
+    let tierUpdateItem = {
+        Update: {
+            TableName: process.env.TABLE_NAME, 
+            ExpressionAttributeNames: {
+                "#T": "total"
+            }, 
+            ExpressionAttributeValues: {
+                ":inc": {
+                    N: `${params.instanceIds.length}`
+                }
+            }, 
+            Key: {
+                "id": {
+                    S: params.stackId
+                }, 
+                "sk": {
+                    S: `tier-${params.stackId}-${params.tier}`
+                }
+            }, 
+            UpdateExpression: "SET #T = #T + :inc"
+        }
+    };
+    ddbParams.TransactItems.push(tierUpdateItem);
 
-    console.log('transactWriteItems:');
     console.log(JSON.stringify(ddbParams));
     ddb.transactWriteItems(ddbParams, function(err, data){
-        if (err) cb(err, null);
+        if (err) {
+            console.log(err, err.stack);
+            cb(err, null);
+        }
         else {
             cb(null, data)
         }
@@ -129,30 +175,33 @@ var ddb = new DDB();
 var ec2 = new EC2();
 var sf = new SF();
 exports.handler =  function(event, context, cb) {
-    let params = parseParams(event);
-    console.log('params:');
-    console.log(JSON.stringify(params));
 
-    recordInstances(ddb, params, function(err, data){
-        if(err) cb(err, null);
-        else {
-            console.log(JSON.stringify(data));
-            processInstances(ec2, params, function(err2, data2){
 
-                if(err2) cb(err2, null);
-                else {
-                    console.log(JSON.stringify(data2));
-                    console.log("sending task success ...");
-                    sendTaskSuccess(sf, params, function(err3, data3) {
-                        if (err) cb(err3, null)
-                        if (data) {
-                            console.log(JSON.stringify(data3));
-                        } 
-                    });
-                }
-            });
-        }
-    });
+    const myPromise = new Promise((resolve, reject) => {
+        let params = parseParams(event);
+        console.log('params:');
+        console.log(JSON.stringify(params));
     
-    return "Done!";
+        recordInstances(ddb, params, function(err, data){
+            if(err) cb(err, null);
+            else {
+                console.log(JSON.stringify(data));
+                processInstances(ec2, params, function(err2, data2){
+    
+                    if(err2) cb(err2, null);
+                    else {
+                        console.log(JSON.stringify(data2));
+                        console.log("sending task success ...");
+                        sendTaskSuccess(sf, params, function(err3, data3) {
+                            if (err) cb(err3, null)
+                            if (data) {
+                                console.log(JSON.stringify(data3));
+                            } 
+                        });
+                    }
+                });
+            }
+        });
+    });
+    return myPromise;
 }
