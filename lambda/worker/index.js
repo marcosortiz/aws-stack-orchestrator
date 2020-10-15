@@ -72,13 +72,16 @@ function recordInstances(ddb, params, cb) {
                         S: instanceId
                     }, 
                     "sk": {
-                        S: `instance`
+                        S: 'instance'
                     }, 
                     "tier": {
                         S: params.tier
                     },
                     "stackId": {
                         S: params.stackId
+                    },
+                    "action": {
+                        S: params.action
                     }
                 }//,
                 // ConditionExpression: "attribute_not_exists(id)"

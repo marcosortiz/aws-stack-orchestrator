@@ -9,52 +9,16 @@ AWS.config.region = REGION;
 var ddb = new DDB();
 var eb = new EB();
 
-// function processEvent(event) {
-//     const promise = new Promise(function(resolve, reject) {
-//         console.log(JSON.stringify(event, null, 2))
-//         let instanceId = event.detail['instance-id'];
-//         let state = event.detail['state'];
-
-//         getTags(instanceId)
-//         .then(data => {
-//             let stackId = data.Stack;
-//             let tier = data.Tier;
-//             if (stackId === undefined) {
-//                 let msg = `Ignoring inscance ${instanceId} since it has no 'Stack' tag.`;
-//                 console.log(msg);
-//                 resolve(msg);
-//             } else {
-//                 let time = new Date(event.time)/1000;
-//                 console.log(`Calling processInstance ${stackId}, ${tier}, ${instanceId}, ${state}, ${time}`);
-//                 processInstance(stackId, tier, instanceId, state, time)
-//                 .then( data => {
-//                     resolve(data);
-//                 })
-//                 .catch(err => {
-//                     console.log(err, err.stack);
-//                 });
-//             }
-//         })
-//         .catch(err => {
-//             console.log(err, err.stack);
-//         });
-//     });
-//     return promise;
-// }
-
-
-
-
-
-// function operationCompleted(action, state) {
-//     if(action === 'stop' && state === 'stopped') {
-//         return true;
-//     } else if (action === 'start' && state === 'running') {
-
-//     } else {
-//         return false;
-//     }
-// }
+function operationCompleted(instance) {
+    console.log(JSON.stringify(instance));
+    if(instance.action === 'stop' && sinstance.tate === 'stopped') {
+        return true;
+    } else if (instance.action === 'start' && instance.state === 'running') {
+        return true;
+    } else {
+        return false;
+    }
+}
 
 function parseInstance(data) {
     let hash = {}
@@ -62,6 +26,7 @@ function parseInstance(data) {
         hash['instanceId'] = data.Item.id.S;
         hash['tier'] = data.Item.tier.S;
         hash['stackId'] = data.Item.stackId.S;
+        hash['action'] = data.Item.action.S;
     }
     return hash
 }
@@ -197,8 +162,8 @@ function putEvent(instance) {
     var params = {
         Entries: [
           {
-            Detail: JSON.stringify(instance),
-            DetailType: 'EC2 Instance State-change Notification',
+            detail: JSON.stringify(instance),
+            detailType: 'EC2 Instance State-change Notification',
             EventBusName: process.env.EVENT_BUS_NAME,
             Resources: instance.resources,
             Source: 'stackOrchestrator',
@@ -234,8 +199,10 @@ exports.handler = async function(event) {
                     console.log(JSON.stringify(data));
                     data['state'] = state;
                     data['time'] = new Date(event.time)/1000;
-                    updateDdb(data);
-
+                    if(operationCompleted(data)) {
+                        console.log('OperationCompleted!')
+                        updateDdb(data);
+                    }
                     data['resources'] = event.resources
                     putEvent(data);
                 }

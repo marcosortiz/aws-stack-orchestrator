@@ -137,7 +137,6 @@ export class CdkStack extends cdk.Stack {
     }));;
   
     const ec2AutomationBus = new events.EventBus(this, 'Ec2Automation', {});
-
     const eventsRuleToLambda = new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
       lambdaFunctionProps: {
         code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stateChangeTracker')),
@@ -177,7 +176,7 @@ export class CdkStack extends cdk.Stack {
         handler: 'index.handler'
       },
       eventRuleProps: {
-        // eventBus: ec2AutomationBus,
+        eventBus: ec2AutomationBus,
         description: 'Tracks stack state changes',
         enabled: true,
         eventPattern: {
