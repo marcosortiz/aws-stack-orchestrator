@@ -19,6 +19,11 @@ const ENV_PROPS = {
     region: process.env.CDK_DEFAULT_REGION }
 }
 
+const EC2_INSTANCE_STATE_CHANGE = 'EC2 Instance State-change Notification';
+const STACK_INSTANCE_STATE_CHANGE = 'EC2 Instance State-change Notification';
+const STACK_INSTANCE_ACTION_COMPLETED = 'Stack Orchestrator EC2 Action completed'
+const STACK_TIER_ACTION_COMPLETED = 'Stack Orchestrator Tier Action completed';
+
 export class CdkStack extends cdk.Stack {
   constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
     super(scope, id, ENV_PROPS);
@@ -122,7 +127,8 @@ export class CdkStack extends cdk.Stack {
 
     const instancesTable = new dynamodb.Table(this, "requests", {
       partitionKey: {name: 'id', type: dynamodb.AttributeType.STRING},
-      sortKey: {name: 'sk', type: dynamodb.AttributeType.STRING}
+      sortKey: {name: 'sk', type: dynamodb.AttributeType.STRING},
+      removalPolicy: cdk.RemovalPolicy.DESTROY
     });
 
     let queryNextInstancesFn = new lambda.Function(this, 'queryNextInstances', {
@@ -137,9 +143,9 @@ export class CdkStack extends cdk.Stack {
     }));;
   
     const ec2AutomationBus = new events.EventBus(this, 'Ec2Automation', {});
-    const eventsRuleToLambda = new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
+    const ec2InstanceStateChanged = new EventsRuleToLambda(this, 'ec2-instance-state-changed', {
       lambdaFunctionProps: {
-        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stateChangeTracker')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/ec2InstanceStateChangeTracker')),
         runtime: lambda.Runtime.NODEJS_12_X,
         handler: 'index.handler'
       },
@@ -147,31 +153,31 @@ export class CdkStack extends cdk.Stack {
         description: 'Tracks EC2 instance state change',
         enabled: true,
         eventPattern: {
-          detailType: ["EC2 Instance State-change Notification"],
+          detailType: [EC2_INSTANCE_STATE_CHANGE],
           source: [ "aws.ec2" ]
         }
       }
     });
-    eventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+    ec2InstanceStateChanged.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       resources: [ec2AutomationBus.eventBusArn],
       actions: ['events:PutEvents'],
     }));
-    eventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+    ec2InstanceStateChanged.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       resources: [instancesTable.tableArn],
       actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
     }));
-    eventsRuleToLambda.lambdaFunction.addEnvironment(
+    ec2InstanceStateChanged.lambdaFunction.addEnvironment(
       'TABLE_NAME', instancesTable.tableName
     );
-    eventsRuleToLambda.lambdaFunction.addEnvironment(
+    ec2InstanceStateChanged.lambdaFunction.addEnvironment(
       'EVENT_BUS_NAME', ec2AutomationBus.eventBusName
     );
 
-    const stackOrchestrationEventsRuleToLambda = new EventsRuleToLambda(this, 'stack-state-changed', {
+    const stackInstanceStateChanged = new EventsRuleToLambda(this, 'stack-instance-state-changed', {
       lambdaFunctionProps: {
-        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackStateChanged')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackInstanceStateChanged')),
         runtime: lambda.Runtime.NODEJS_12_X,
         handler: 'index.handler'
       },
@@ -180,27 +186,74 @@ export class CdkStack extends cdk.Stack {
         description: 'Tracks stack state changes',
         enabled: true,
         eventPattern: {
-          detailType: ["EC2 Instance State-change Notification"],
+          detailType: [STACK_INSTANCE_STATE_CHANGE],
           source: [ "stackOrchestrator" ]
         }
       }
     });
-    stackOrchestrationEventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+    stackInstanceStateChanged.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       resources: [ec2AutomationBus.eventBusArn],
       actions: ['events:PutEvents'],
     }));
-    stackOrchestrationEventsRuleToLambda.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+    stackInstanceStateChanged.lambdaFunction.addEnvironment(
+      'EVENT_BUS_NAME', ec2AutomationBus.eventBusName
+    );
+
+    const stackInstanceActionCompleted = new EventsRuleToLambda(this, 'stack-instance-action-completed', {
+      lambdaFunctionProps: {
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackInstanceActionCompleted')),
+        runtime: lambda.Runtime.NODEJS_12_X,
+        handler: 'index.handler'
+      },
+      eventRuleProps: {
+        eventBus: ec2AutomationBus,
+        description: 'Tracks stack state changes',
+        enabled: true,
+        eventPattern: {
+          detailType: [STACK_INSTANCE_ACTION_COMPLETED],
+          source: [ "stackOrchestrator" ]
+        }
+      }
+    });
+    stackInstanceActionCompleted.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [ec2AutomationBus.eventBusArn],
+      actions: ['events:PutEvents'],
+    }));
+    stackInstanceActionCompleted.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       resources: [instancesTable.tableArn],
       actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
     }));
-    stackOrchestrationEventsRuleToLambda.lambdaFunction.addEnvironment(
+    stackInstanceActionCompleted.lambdaFunction.addEnvironment(
       'TABLE_NAME', instancesTable.tableName
     );
-    stackOrchestrationEventsRuleToLambda.lambdaFunction.addEnvironment(
+    stackInstanceActionCompleted.lambdaFunction.addEnvironment(
       'EVENT_BUS_NAME', ec2AutomationBus.eventBusName
     );
+
+    const stackTierActionCompleted = new EventsRuleToLambda(this, 'stack-tier-action-completed', {
+      lambdaFunctionProps: {
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackTierActionCompleted')),
+        runtime: lambda.Runtime.NODEJS_12_X,
+        handler: 'index.handler'
+      },
+      eventRuleProps: {
+        eventBus: ec2AutomationBus,
+        description: 'Tracks stack state changes',
+        enabled: true,
+        eventPattern: {
+          detailType: [STACK_TIER_ACTION_COMPLETED],
+          source: [ "stackOrchestrator" ]
+        }
+      }
+    });
+    stackTierActionCompleted.lambdaFunction.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: ['*'],
+      actions: ['states:SendTaskSuccess', 'states:SendTaskFailure'],
+    }));
 
     let queryStackOrderFn = new lambda.Function(this, 'queryStack', {
       runtime: lambda.Runtime.NODEJS_12_X,

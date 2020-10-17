@@ -10,8 +10,7 @@ var ddb = new DDB();
 var eb = new EB();
 
 function operationCompleted(instance) {
-    console.log(JSON.stringify(instance));
-    if(instance.action === 'stop' && sinstance.tate === 'stopped') {
+    if(instance.action === 'stop' && instance.state === 'stopped') {
         return true;
     } else if (instance.action === 'start' && instance.state === 'running') {
         return true;
@@ -50,8 +49,6 @@ function getInstance(instanceId, cb) {
             cb(err, null);
         } 
         else {
-            console.log('ddb.getItem results:')
-            console.log(JSON.stringify(data));
             if(data.Item) {
                 cb(null, parseInstance(data)) ;
             } else {
@@ -145,8 +142,6 @@ function updateDdb(instance) {
     };
     ddbParams.TransactItems.push(updateStackItem);
 
-    console.log('transactWriteItems:');
-    console.log(JSON.stringify(ddbParams));
     ddb.transactWriteItems(ddbParams, function(err, data){
         if(err) {
             console.log(err, err.stack);
@@ -162,8 +157,8 @@ function putEvent(instance) {
     var params = {
         Entries: [
           {
-            detail: JSON.stringify(instance),
-            detailType: 'EC2 Instance State-change Notification',
+            Detail: JSON.stringify(instance),
+            DetailType: 'EC2 Instance State-change Notification',
             EventBusName: process.env.EVENT_BUS_NAME,
             Resources: instance.resources,
             Source: 'stackOrchestrator',
@@ -171,7 +166,7 @@ function putEvent(instance) {
           }
         ]
       };
-      console.log('About to put event');
+      console.log('putStackInstancestateChange event ...');
       console.log(JSON.stringify(params))
       eb.putEvents(params, function(err, data) {
         if (err) {
@@ -192,15 +187,12 @@ exports.handler = async function(event) {
         getInstance(instanceId, function(err, data){
             if(err) reject(err);
             else {
-                if(data === null) {
-                    console.log(`Ignoring ${state} event for instance ${instanceId}.`);
-                } else {
-                    console.log('getInstance result:');
-                    console.log(JSON.stringify(data));
+                if(data !== null) {
                     data['state'] = state;
                     data['time'] = new Date(event.time)/1000;
                     if(operationCompleted(data)) {
-                        console.log('OperationCompleted!')
+                        console.log(JSON.stringify(data));
+                        console.log('Updating dynamoDB ...');
                         updateDdb(data);
                     }
                     data['resources'] = event.resources
