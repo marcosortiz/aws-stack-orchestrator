@@ -11,6 +11,7 @@ import * as tasks from '@aws-cdk/aws-stepfunctions-tasks';
 const { LambdaToSqsToLambda } = require('@aws-solutions-constructs/aws-lambda-sqs-lambda');
 import * as dynamodb from '@aws-cdk/aws-dynamodb';
 import events = require('@aws-cdk/aws-events');
+import * as destinations from '@aws-cdk/aws-lambda-destinations';
 
 
 const ENV_PROPS = {
@@ -200,11 +201,25 @@ export class CdkStack extends cdk.Stack {
       'EVENT_BUS_NAME', ec2AutomationBus.eventBusName
     );
 
+    let deleteStackInstanceFn = new lambda.Function(this, 'deleteStackInstance', {
+      runtime: lambda.Runtime.NODEJS_12_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackInstanceActionCompleted/deleteStackInstances')),
+    });
+    deleteStackInstanceFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [instancesTable.tableArn],
+      actions: ['dynamodb:DeleteItem'],
+    }));
+    deleteStackInstanceFn.addEnvironment(
+      'TABLE_NAME', instancesTable.tableName
+    );
     const stackInstanceActionCompleted = new EventsRuleToLambda(this, 'stack-instance-action-completed', {
       lambdaFunctionProps: {
         code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackInstanceActionCompleted')),
         runtime: lambda.Runtime.NODEJS_12_X,
-        handler: 'index.handler'
+        handler: 'index.handler',
+        onSuccess: new destinations.LambdaDestination(deleteStackInstanceFn)
       },
       eventRuleProps: {
         eventBus: ec2AutomationBus,
@@ -233,11 +248,25 @@ export class CdkStack extends cdk.Stack {
       'EVENT_BUS_NAME', ec2AutomationBus.eventBusName
     );
 
+    let deleteStackTierFn = new lambda.Function(this, 'deleteStackTier', {
+      runtime: lambda.Runtime.NODEJS_12_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackTierActionCompleted/deleteStackTier')),
+    });
+    deleteStackTierFn.role?.addToPrincipalPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: [instancesTable.tableArn],
+      actions: ['dynamodb:DeleteItem'],
+    }));
+    deleteStackTierFn.addEnvironment(
+      'TABLE_NAME', instancesTable.tableName
+    );
     const stackTierActionCompleted = new EventsRuleToLambda(this, 'stack-tier-action-completed', {
       lambdaFunctionProps: {
         code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/stackTierActionCompleted')),
         runtime: lambda.Runtime.NODEJS_12_X,
-        handler: 'index.handler'
+        handler: 'index.handler',
+        onSuccess: new destinations.LambdaDestination(deleteStackTierFn)
       },
       eventRuleProps: {
         eventBus: ec2AutomationBus,
@@ -271,6 +300,26 @@ export class CdkStack extends cdk.Stack {
       resources: [instancesTable.tableArn],
       actions: ['dynamodb:PutItem'],
     }));
+
+    const auditLogger = new EventsRuleToLambda(this, 'stack-orchestrator-audit-logger', {
+      lambdaFunctionProps: {
+        code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'lambda/auditLogger')),
+        runtime: lambda.Runtime.NODEJS_12_X,
+        handler: 'index.handler'
+      },
+      eventRuleProps: {
+        eventBus: ec2AutomationBus,
+        description: 'Tracks stack state changes',
+        enabled: true,
+        eventPattern: {
+          detailType: [STACK_INSTANCE_STATE_CHANGE, 
+            STACK_INSTANCE_ACTION_COMPLETED,
+            STACK_TIER_ACTION_COMPLETED
+          ],
+          source: [ "stackOrchestrator" ]
+        }
+      }
+    });
 
     let deleteStackRequestFn = new lambda.Function(this, 'deleteStackRequest', {
       runtime: lambda.Runtime.NODEJS_12_X,
@@ -398,19 +447,6 @@ export class CdkStack extends cdk.Stack {
     });
     deleteStackRequestTask.next(done);
 
-    // const processNextTierTask = new tasks.StepFunctionsStartExecution(this, 'ProcessNextTier', {
-    //   stateMachine: processTierSm,
-    //   integrationPattern: sfn.IntegrationPattern.REQUEST_RESPONSE,
-    //   input: sfn.TaskInput.fromObject({
-    //     "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": '$$.Execution.Id',
-    //     // token: sfn.JsonPath.taskToken,   
-    //     stackId: sfn.JsonPath.stringAt('$.stackId'),
-    //     tier: sfn.JsonPath.stringAt('$.tier'),
-    //     action: sfn.JsonPath.stringAt('$.action'),
-    //   }),
-    //   resultPath: sfn.JsonPath.DISCARD
-    // });
-
     const processNextTierTask = new tasks.LambdaInvoke(this, 'ProcessNextTier', {
       lambdaFunction: processNextTierFn,
       integrationPattern: sfn.IntegrationPattern.WAIT_FOR_TASK_TOKEN,
@@ -421,9 +457,6 @@ export class CdkStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(10),
       resultPath: sfn.JsonPath.DISCARD
     });
-
-
-
 
     const map = new sfn.Map(this, 'Map Tiers', {
         maxConcurrency: 1,
